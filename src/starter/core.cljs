@@ -140,18 +140,17 @@
             (wave-viz sketch waveform)))))
 
 (def previous-rms
-  (atom (repeat 40 0)))
+  (atom (repeat 30)))
 
 (defn logMap [val inMin inMax outMin outMax]
-  (let [o (boolean (and (= inMax 0)
+  (let [o (boolean (or (= inMax 0)
                         (= inMin 0)))
         offset (if o 1 0 )
         inMin (if o (+ inMin offset) inMin)
-        inMin (if o (+ inMax offset) inMin)
+        inMax (if o (+ inMax offset) inMax)
         a (/ (- outMin outMax) (js/Math.log10 (/ inMin inMax)))
         b (- outMin (* a (js/Math.log10 inMin)))
-        r (+ (* a (js/Math.log10 (+ val offset))) b)
-        ]
+        r (+ (* a (js/Math.log10 (+ val offset))) b)]
     r))
 
 (defn amplitude-over-time
@@ -160,7 +159,7 @@
   (set! (.-setup sketch)
         (fn []
           (doto sketch
-            (.createCanvas 800 600)
+            (.createCanvas js/window.innerWidth js/window.innerHeight)
             (.background 0)
             (.rectMode (.-CENTER sketch))
             (.colorMode (.-HSB sketch)))))
@@ -170,8 +169,9 @@
                 spacing 10
                 width (.-width sketch)
                 height (.-height sketch)
-                w (/ width (* (count @previous-rms)
-                              spacing))
+                w (* (/ width (* (count @previous-rms)
+                                 spacing))
+                     3)
                 min-height 2
                 roundness 20]
 
@@ -183,7 +183,8 @@
 
             (doto sketch
               (.background "#ffffff")
-              (.fill 255 255 255 255))
+              (.fill 255 10)
+              (.stroke 0 0))
 
             (doall
               (map-indexed
@@ -192,19 +193,19 @@
                                 i
                                 (count @previous-rms)
                                 0
-                                (/ width 2)
-                                width)
+                                width
+                                (/ width 2))
                         h (.map sketch
-                               f
-                               0
+                                f
+                                0
                                0.5
                                min-height
                                height)
-                        a (logMap  i
-                                   0
-                                   (count @previous-rms)
-                                   1
-                                   250)
+                        a (logMap i
+                                  0
+                                  (count @previous-rms)
+                                  1
+                                  250)
                         hueValue (.map
                                    sketch
                                    h
