@@ -154,10 +154,12 @@
           (let [rms (get @analytics "rms")
                 spacing 10
                 width (.-width sketch)
+                height (.-height sketch)
                 w (/ width (* (count @previous-rms)
                               spacing))
                 min-height 2
                 roundness 20]
+
             (swap! previous-rms
                    (fn [rms-values]
                      (drop-last
@@ -166,10 +168,41 @@
 
             (doto sketch
               (.background 20 20)
-              (.fill 255 10))
+              (.fill 255 200))
 
-            ;; TODO
-            ))))
+            (doall
+              (map-indexed
+                (fn [i f]
+                  (let [x (.map sketch
+                                i
+                                (count @previous-rms)
+                                0
+                                (/ width 2)
+                                width)
+                        h (.logMap sketch
+                               f
+                               0
+                               0.5
+                               min-height
+                               height)
+                        a (.map sketch
+                                   i
+                                   0
+                                   (count @previous-rms)
+                                   1
+                                   250)
+                        hueValue (.map
+                                   h
+                                   min-height
+                                   height
+                                   200
+                                   255)]
+                    (.fill sketch hueValue 255 255 a)
+                    (.rect sketch x (/ height 2) w h)
+                    (.rect sketch (- width x) (/ height 2) w h)))
+
+                @previous-rms))
+             ))))
 
 (defn app []
   (r/create-class
@@ -179,8 +212,8 @@
                               (let [analyzer (mayda-analyzer audio-source)]
                                 (.start analyzer)))
 
-                            (new p5 audio-visualizer)
-                            ;;(new p5 amplitude-over-time)
+                            ;; (new p5 audio-visualizer)
+                            (new p5 amplitude-over-time)
                             )
 
      :render (fn []
