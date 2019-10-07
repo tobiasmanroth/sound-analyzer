@@ -41,18 +41,9 @@
                         (clj->js {"audioContext" ctx
                                   "source" audio-source
                                   "bufferSize" 256
-                                  "featureExtractors" ["rms"
-                                                       "amplitudeSpectrum"
-                                                       "perceptualSharpness"]
+                                  "featureExtractors" ["rms"]
                                   "callback" (fn [features]
-                                               (let [new-analytics (-> features
-                                                                       (js->clj)
-                                                                       (update "amplitudeSpectrum"
-                                                                               (fn [spectrum]
-                                                                                 (->clj spectrum)))
-                                                                       (update "powerSpectrum"
-                                                                               (fn [spectrum]
-                                                                                 (->clj spectrum))))]
+                                               (let [new-analytics (js->clj features)]
                                                  (swap! offline-analytics
                                                         (fn [analytics]
                                                           (conj analytics new-analytics)))))})))
@@ -84,9 +75,10 @@
                                                            @analytics
                                                            new-analytics))))})))
 
+(def ready? (atom false))
+
 (defn on-loaded [sound]
   (js/console.log "LOADED")
-
   (let [buffer (.-buffer sound)
         offline-audio-context (new js/OfflineAudioContext
                                    1
@@ -102,29 +94,52 @@
 
     (-> (.startRendering offline-audio-context)
         (.then (fn [buffer]
-                 (js/console.log "Analysing complete!"))))))
+                 (js/console.log "Analysing complete!")
+                 (.play sound)
+                 (reset! ready? true)
+                 buffer)))))
 
 
 (def target-frame-rate 60)
-(def frame (atom 0))
+(def frame (r/atom 0))
+
+(defn loudness-viz
+  [sketch rms]
+  (let [width (.-width sketch)
+        height (.-height sketch)]
+    (.fill sketch 255 0 0)
+    (.circle sketch
+             (/ width 2)
+             (/ height 2)
+             (* rms width))))
 
 (defn offline-visualizer
   "Instance mode of p5: https://github.com/processing/p5.js/wiki/Global-and-instance-mode"
   [^js sketch]
-  (set! (.-preload sketch)
-        (fn []
-          (.loadSound sketch "/example3.mp3" on-loaded)))
-  (set! (.-setup sketch)
-        (fn []
-          (.createCanvas sketch 800 600)))
-  (set! (.-draw sketch)
-        (fn []
-          (let [percentage (/ @frame target-frame-rate sound.buffer.duration)])
-          #_(let [waveform (get @analytics "buffer")
-                spectrum (get @analytics "powerSpectrum")
-                rms (get @analytics "rms")
-                sharpness (get @analytics "perceptualSharpness")])
-          )))
+  (let [buffer-duration (atom 0)]
+    (set! (.-preload sketch)
+          (fn []
+            (.loadSound sketch "/example.mp3" (fn [sound]
+                                                (on-loaded sound)
+                                                (reset! buffer-duration sound.buffer.duration)))))
+    (set! (.-setup sketch)
+          (fn []
+            (.createCanvas sketch 400 400)))
+    (set! (.-draw sketch)
+          (fn []
+            (when @ready?
+              ;; TODO CALCULATE RIGHT BUFFER PART
+              (let [percentage (/ @frame target-frame-rate @buffer-duration)
+                    index (int (* percentage (count @offline-analytics)))
+                    rms (get (nth @offline-analytics index)
+                             "rms")]
+
+                (.background sketch "#ffffff")
+
+                (if (<= index (count @offline-analytics))
+                  (swap! frame inc)
+                  (reset! frame 0))
+                (loudness-viz sketch rms)))))))
 
 (defn sharpness-color
   [sharpness]
@@ -156,16 +171,6 @@
               (reset! maxi f))
             (.rect sketch x y w h)))
         spectrum))))
-
-(defn loudness-viz
-  [sketch rms]
-  (let [width (.-width sketch)
-        height (.-height sketch)]
-    (.fill sketch 255 0 0)
-    (.circle sketch
-             (/ width 2)
-             (/ height 2)
-             (* rms width))))
 
 (defn wave-viz
   [sketch waveform]
@@ -308,7 +313,7 @@
                     :loop true
                     "crossOrigin" "anonymous"
                     :id "audio"
-                    :src "/example3.mp3"}]
+                    :src "/example.mp3"}]
                   [:select
                    {:onChange (fn [e]
                                 (swap! model assoc :sketch e.target.value))}
@@ -320,7 +325,8 @@
                     "All"]]
                   [react-p5
                    {:sketch (get visualizers
-                                 (:sketch @model))}]])})))
+                                 (:sketch @model))}]
+                  [:span @frame]])})))
 
 (defn stop []
   (js/console.log "Stopping..."))
