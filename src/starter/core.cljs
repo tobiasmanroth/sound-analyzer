@@ -2,6 +2,7 @@
   (:require [reagent.core :as r]
             ["meyda" :as m]
             ["p5" :as p5]
+            ["p5/lib/addons/p5.sound" :as p5-sound]
             ["react-p5-wrapper" :as react-p5-wrapper]))
 
 (def react-p5
@@ -10,11 +11,14 @@
 (defonce audio-context
          (new js/AudioContext))
 
+(defn audio-source []
+  (.createMediaElementSource audio-context (js/document.getElementById "audio")))
+
 (defonce analytics
          (r/atom {}))
 
-(defn audio-source []
-  (.createMediaElementSource audio-context (js/document.getElementById "audio")))
+(defonce offline-analytics
+         (r/atom []))
 
 (defn ->clj [typed-array]
   (js->clj
@@ -30,11 +34,34 @@
                      (+ (* 0.8 item1) (* item2 0.2)))
                [a1 a2])))
 
+(defn offline-mayda-analyzer
+  "Audio feature docs: https://meyda.js.org/audio-features.html"
+  [ctx audio-source]
+  (.createMeydaAnalyzer m
+                        (clj->js {"audioContext" ctx
+                                  "source" audio-source
+                                  "bufferSize" 256
+                                  "featureExtractors" ["rms"
+                                                       "amplitudeSpectrum"
+                                                       "perceptualSharpness"]
+                                  "callback" (fn [features]
+                                               (let [new-analytics (-> features
+                                                                       (js->clj)
+                                                                       (update "amplitudeSpectrum"
+                                                                               (fn [spectrum]
+                                                                                 (->clj spectrum)))
+                                                                       (update "powerSpectrum"
+                                                                               (fn [spectrum]
+                                                                                 (->clj spectrum))))]
+                                                 (swap! offline-analytics
+                                                        (fn [analytics]
+                                                          (conj analytics new-analytics)))))})))
+
 (defn mayda-analyzer
   "Audio feature docs: https://meyda.js.org/audio-features.html"
-  [audio-source]
+  [ctx audio-source]
   (.createMeydaAnalyzer m
-                        (clj->js {"audioContext" audio-context
+                        (clj->js {"audioContext" ctx
                                   "source" audio-source
                                   "bufferSize" 256
                                   "featureExtractors" ["buffer"
@@ -56,6 +83,48 @@
                                                            merge-function
                                                            @analytics
                                                            new-analytics))))})))
+
+(defn on-loaded [sound]
+  (js/console.log "LOADED")
+
+  (let [buffer (.-buffer sound)
+        offline-audio-context (new js/OfflineAudioContext
+                                   1
+                                   (.-length buffer)
+                                   (.-sampleRate buffer))
+        buffer-source (.createBufferSource offline-audio-context)
+        _ (set! (.-buffer buffer-source) buffer)
+        analyzer (offline-mayda-analyzer offline-audio-context buffer-source)]
+    ;;(.connect buffer-source analyzer)
+    ;;(.connect analyzer (.-destination offline-audio-context))
+    (.start buffer-source 0)
+    (.start analyzer)
+
+    (-> (.startRendering offline-audio-context)
+        (.then (fn [buffer]
+                 (js/console.log "Analysing complete!"))))))
+
+
+(def target-frame-rate 60)
+(def frame (atom 0))
+
+(defn offline-visualizer
+  "Instance mode of p5: https://github.com/processing/p5.js/wiki/Global-and-instance-mode"
+  [^js sketch]
+  (set! (.-preload sketch)
+        (fn []
+          (.loadSound sketch "/example3.mp3" on-loaded)))
+  (set! (.-setup sketch)
+        (fn []
+          (.createCanvas sketch 800 600)))
+  (set! (.-draw sketch)
+        (fn []
+          (let [percentage (/ @frame target-frame-rate sound.buffer.duration)])
+          #_(let [waveform (get @analytics "buffer")
+                spectrum (get @analytics "powerSpectrum")
+                rms (get @analytics "rms")
+                sharpness (get @analytics "perceptualSharpness")])
+          )))
 
 (defn sharpness-color
   [sharpness]
@@ -218,15 +287,16 @@
                 @previous-rms))))))
 
 (def visualizers {"v1" audio-visualizer
-                  "v2" amplitude-over-time})
+                  "v2" amplitude-over-time
+                  "v3" offline-visualizer})
 
 (defn app []
-  (let [model (r/atom {:sketch "v1"})]
+  (let [model (r/atom {:sketch "v3"})]
     (r/create-class
       {:component-did-mount (fn []
                               (let [audio-source (audio-source)]
                                 (.connect audio-source ^js audio-context.destination)
-                                (let [analyzer (mayda-analyzer audio-source)]
+                                (let [analyzer (mayda-analyzer audio-context audio-source)]
                                   (.start analyzer))))
 
        :render (fn []
@@ -238,7 +308,7 @@
                     :loop true
                     "crossOrigin" "anonymous"
                     :id "audio"
-                    :src "/example2.mp3"}]
+                    :src "/example3.mp3"}]
                   [:select
                    {:onChange (fn [e]
                                 (swap! model assoc :sketch e.target.value))}
