@@ -136,6 +136,41 @@
             (loudness-viz sketch rms)
             (wave-viz sketch waveform)))))
 
+(def previous-rms
+  (atom (repeat 60 0)))
+
+(defn amplitude-over-time
+  "Instance mode of p5: https://github.com/processing/p5.js/wiki/Global-and-instance-mode"
+  [^js sketch]
+  (set! (.-setup sketch)
+        (fn []
+          (doto sketch
+            (.createCanvas 800 600)
+            (.background 0)
+            (.rectMode (.-CENTER sketch))
+            (.colorMode (.-HSB sketch)))))
+  (set! (.-draw sketch)
+        (fn []
+          (let [rms (get @analytics "rms")
+                spacing 10
+                width (.-width sketch)
+                w (/ width (* (count @previous-rms)
+                              spacing))
+                min-height 2
+                roundness 20]
+            (swap! previous-rms
+                   (fn [rms-values]
+                     (drop-last
+                       (conj rms-values rms)))
+                   conj rms)
+
+            (doto sketch
+              (.background 20 20)
+              (.fill 255 10))
+
+            ;; TODO
+            ))))
+
 (defn app []
   (r/create-class
     {:component-did-mount (fn []
@@ -143,7 +178,10 @@
                               (.connect audio-source ^js audio-context.destination)
                               (let [analyzer (mayda-analyzer audio-source)]
                                 (.start analyzer)))
-                            (new p5 audio-visualizer))
+
+                            (new p5 audio-visualizer)
+                            ;;(new p5 amplitude-over-time)
+                            )
 
      :render (fn []
                [:div
