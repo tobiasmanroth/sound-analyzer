@@ -2,7 +2,10 @@
   (:require [reagent.core :as r]
             ["meyda" :as m]
             ["p5" :as p5]
-            ["three" :as three]))
+            ["react-p5-wrapper" :as react-p5-wrapper]))
+
+(def react-p5
+  (r/adapt-react-class react-p5-wrapper/default))
 
 (defonce audio-context
          (new js/AudioContext))
@@ -222,11 +225,7 @@
                             (let [audio-source (audio-source)]
                               (.connect audio-source ^js audio-context.destination)
                               (let [analyzer (mayda-analyzer audio-source)]
-                                (.start analyzer)))
-
-                            ;; (new p5 audio-visualizer)
-                            (new p5 amplitude-over-time)
-                            )
+                                (.start analyzer))))
 
      :render (fn []
                [:div
@@ -239,7 +238,8 @@
                   :id "audio"
                   :src "/example2.mp3"}]
                 [:span (get @analytics "perceptualSharpness")]
-                ])}))
+                [react-p5
+                 {:sketch amplitude-over-time}]])}))
 
 (defn stop []
   (js/console.log "Stopping..."))
