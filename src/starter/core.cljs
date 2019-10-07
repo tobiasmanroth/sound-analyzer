@@ -140,12 +140,12 @@
             (wave-viz sketch waveform)))))
 
 (def previous-rms
-  (atom (repeat 30)))
+  (atom (repeat 30 0)))
 
 (defn logMap [val inMin inMax outMin outMax]
   (let [o (boolean (or (= inMax 0)
-                        (= inMin 0)))
-        offset (if o 1 0 )
+                       (= inMin 0)))
+        offset (if o 1 0)
         inMin (if o (+ inMin offset) inMin)
         inMax (if o (+ inMax offset) inMax)
         a (/ (- outMin outMax) (js/Math.log10 (/ inMin inMax)))
@@ -170,8 +170,7 @@
                 width (.-width sketch)
                 height (.-height sketch)
                 w (* (/ width (* (count @previous-rms)
-                                 spacing))
-                     3)
+                                 spacing)))
                 min-height 2
                 roundness 20]
 
@@ -198,9 +197,9 @@
                         h (.map sketch
                                 f
                                 0
-                               0.5
-                               min-height
-                               height)
+                                0.5
+                                min-height
+                                height)
                         a (logMap i
                                   0
                                   (count @previous-rms)
@@ -216,31 +215,42 @@
                     (.fill sketch hueValue 255 255 a)
                     (.rect sketch x (/ height 2) w h roundness)
                     (.rect sketch (- width x) (/ height 2) w h roundness)))
+                @previous-rms))))))
 
-                @previous-rms))
-             ))))
+(def visualizers {"v1" audio-visualizer
+                  "v2" amplitude-over-time})
 
 (defn app []
-  (r/create-class
-    {:component-did-mount (fn []
-                            (let [audio-source (audio-source)]
-                              (.connect audio-source ^js audio-context.destination)
-                              (let [analyzer (mayda-analyzer audio-source)]
-                                (.start analyzer))))
+  (let [model (r/atom {:sketch "v1"})]
+    (r/create-class
+      {:component-did-mount (fn []
+                              (let [audio-source (audio-source)]
+                                (.connect audio-source ^js audio-context.destination)
+                                (let [analyzer (mayda-analyzer audio-source)]
+                                  (.start analyzer))))
 
-     :render (fn []
-               [:div
-                [:h1 "Audio Visualizer 0.11"]
-                [:audio
-                 {:controls true
-                  "autoPlay" false
-                  :loop true
-                  "crossOrigin" "anonymous"
-                  :id "audio"
-                  :src "/example2.mp3"}]
-                [:span (get @analytics "perceptualSharpness")]
-                [react-p5
-                 {:sketch amplitude-over-time}]])}))
+       :render (fn []
+                 [:div
+                  [:h1 "Audio Visualizer 0.11"]
+                  [:audio
+                   {:controls true
+                    "autoPlay" false
+                    :loop true
+                    "crossOrigin" "anonymous"
+                    :id "audio"
+                    :src "/example2.mp3"}]
+                  [:select
+                   {:onChange (fn [e]
+                                (swap! model assoc :sketch e.target.value))}
+                   [:option
+                    {:value "v1"}
+                    "Amplitude over time"]
+                   [:option
+                    {:value "v2"}
+                    "All"]]
+                  [react-p5
+                   {:sketch (get visualizers
+                                 (:sketch @model))}]])})))
 
 (defn stop []
   (js/console.log "Stopping..."))
