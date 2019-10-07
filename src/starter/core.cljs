@@ -1,6 +1,6 @@
 (ns starter.core
   (:require [reagent.core :as r]
-            ["Meyda" :as m]
+            ["meyda" :as m]
             ["p5" :as p5]
             ["three" :as three]))
 
@@ -18,7 +18,6 @@
     (js/Array.apply nil
                     typed-array)))
 
-
 (defn merge-function [a1 a2]
   (cond (number? a1)
         (min 1
@@ -26,8 +25,7 @@
         (seq a1)
         (apply map (fn [item1 item2]
                      (+ (* 0.8 item1) (* item2 0.2)))
-               [a1 a2])
-        ))
+               [a1 a2])))
 
 (defn mayda-analyzer
   "Audio feature docs: https://meyda.js.org/audio-features.html"
@@ -56,18 +54,6 @@
                                                            @analytics
                                                            new-analytics))))})))
 
-(comment
-
-  (def data [[1 2 3]
-             [2 3 4]])
-
-  (apply map (fn [& items]
-               (/ (apply + items)
-                  (count data)))
-         data)
-
-  )
-
 (defn sharpness-color
   [sharpness]
   [(+ (* (- 1 sharpness) 128)
@@ -79,6 +65,60 @@
 
 (def maxi (atom 0))
 
+(defn spectrum-viz
+  [sketch spectrum]
+  (let [width (.-width sketch)
+        height (.-height sketch)]
+    (.noStroke sketch)
+    (.fill sketch 0 255 0)
+    (doall
+      (map-indexed
+        (fn [i f]
+          (let [x (* (js/Math.sqrt (/ (+ i 1) (count spectrum)))
+                     width)
+                y height
+                w (* (js/Math.sqrt (/ i (count spectrum)))
+                     width)
+                h (* -1 (/ f 128) height)]
+            (when (< @maxi f)
+              (reset! maxi f))
+            (.rect sketch x y w h)))
+        spectrum))))
+
+(defn loudness-viz
+  [sketch rms]
+  (let [width (.-width sketch)
+        height (.-height sketch)]
+    (.fill sketch 255 0 0)
+    (.circle sketch
+             (/ width 2)
+             (/ height 2)
+             (* rms width))))
+
+(defn wave-viz
+  [sketch waveform]
+  (let [width (.-width sketch)
+        height (.-height sketch)]
+    (doto sketch
+      (.noFill)
+      (.beginShape)
+      (.stroke 255 255 255)
+      (.strokeWeight 4))
+    (doall
+      (map-indexed
+        (fn [i f]
+          (let [x (* (/ i (count waveform))
+                     width)
+                y (+ (/ height 2)
+                     (* f height))]
+            (.vertex sketch x y)))
+        waveform))
+    (.endShape sketch)))
+
+(defn sharpness-vis [sketch sharpness]
+  (let [[r g b] (sharpness-color sharpness)]
+    (.background sketch r g b)))
+
 (defn audio-visualizer
   "Instance mode of p5: https://github.com/processing/p5.js/wiki/Global-and-instance-mode"
   [^js sketch]
@@ -87,62 +127,14 @@
           (.createCanvas sketch 800 600)))
   (set! (.-draw sketch)
         (fn []
-          (let [width (.-width sketch)
-                height (.-height sketch)
-                waveform (get @analytics "buffer")
+          (let [waveform (get @analytics "buffer")
                 spectrum (get @analytics "powerSpectrum")
                 rms (get @analytics "rms")
                 sharpness (get @analytics "perceptualSharpness")]
-
-            ;; Sharpness as background color:
-
-            (let [[r g b] (sharpness-color sharpness)]
-              (.background sketch r g b))
-
-            ;; Visualize spectrum:
-            (.noStroke sketch)
-            (.fill sketch 0 255 0)
-            (doall
-              (map-indexed
-                (fn [i f]
-                  (let [x (* (js/Math.sqrt (/ (+ i 1) (count spectrum)))
-                             width)
-                        y height
-                        w (* (js/Math.sqrt (/ i (count spectrum)))
-                             width)
-                        h (* -1 (/ f 128) height)]
-                    (when (< @maxi f)
-                      (reset! maxi f))
-                    (.rect sketch x y w h)))
-                spectrum))
-
-            ;; Loudness as red circle
-            (.fill sketch 255 0 0)
-            (.circle sketch
-                     (/ width 2)
-                     (/ height 2)
-                     (* rms width))
-
-            (doto sketch
-              (.noFill)
-              (.beginShape)
-              (.stroke 255 255 255)
-              (.strokeWeight 4))
-
-            (doall
-              (map-indexed
-                (fn [i f]
-                  (let [x (* (/ i (count waveform))
-                             width)
-                        y (+ (/ height 2)
-                             (* f height))]
-                    (.vertex sketch x y)))
-                waveform))
-            (.endShape sketch)
-
-
-            ))))
-
+            (sharpness-vis sketch sharpness)
+            (spectrum-viz sketch spectrum)
+            (loudness-viz sketch rms)
+            (wave-viz sketch waveform)))))
 
 (defn app []
   (r/create-class
