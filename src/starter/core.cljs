@@ -137,7 +137,19 @@
             (wave-viz sketch waveform)))))
 
 (def previous-rms
-  (atom (repeat 60 0)))
+  (atom (repeat 40 0)))
+
+(defn logMap [val inMin inMax outMin outMax]
+  (let [o (boolean (and (= inMax 0)
+                        (= inMin 0)))
+        offset (if o 1 0 )
+        inMin (if o (+ inMin offset) inMin)
+        inMin (if o (+ inMax offset) inMin)
+        a (/ (- outMin outMax) (js/Math.log10 (/ inMin inMax)))
+        b (- outMin (* a (js/Math.log10 inMin)))
+        r (+ (* a (js/Math.log10 (+ val offset))) b)
+        ]
+    r))
 
 (defn amplitude-over-time
   "Instance mode of p5: https://github.com/processing/p5.js/wiki/Global-and-instance-mode"
@@ -167,8 +179,8 @@
                    conj rms)
 
             (doto sketch
-              (.background 20 20)
-              (.fill 255 200))
+              (.background "#ffffff")
+              (.fill 255 255 255 255))
 
             (doall
               (map-indexed
@@ -179,27 +191,27 @@
                                 0
                                 (/ width 2)
                                 width)
-                        h (.logMap sketch
+                        h (.map sketch
                                f
                                0
                                0.5
                                min-height
                                height)
-                        a (.map sketch
-                                   i
+                        a (logMap  i
                                    0
                                    (count @previous-rms)
                                    1
                                    250)
                         hueValue (.map
+                                   sketch
                                    h
                                    min-height
                                    height
                                    200
                                    255)]
                     (.fill sketch hueValue 255 255 a)
-                    (.rect sketch x (/ height 2) w h)
-                    (.rect sketch (- width x) (/ height 2) w h)))
+                    (.rect sketch x (/ height 2) w h roundness)
+                    (.rect sketch (- width x) (/ height 2) w h roundness)))
 
                 @previous-rms))
              ))))
