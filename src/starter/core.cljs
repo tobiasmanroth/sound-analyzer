@@ -17,8 +17,8 @@
 (defonce analytics
          (r/atom {}))
 
-(defonce offline-analytics
-         (r/atom []))
+(def offline-analytics
+  (r/atom []))
 
 (defn ->clj [typed-array]
   (js->clj
@@ -34,13 +34,15 @@
                      (+ (* 0.8 item1) (* item2 0.2)))
                [a1 a2])))
 
+(def analyzer-buffer-size 256)
+
 (defn offline-mayda-analyzer
   "Audio feature docs: https://meyda.js.org/audio-features.html"
   [ctx audio-source]
   (.createMeydaAnalyzer m
                         (clj->js {"audioContext" ctx
                                   "source" audio-source
-                                  "bufferSize" 256
+                                  "bufferSize" analyzer-buffer-size
                                   "featureExtractors" ["rms"]
                                   "callback" (fn [features]
                                                (let [new-analytics (js->clj features)]
@@ -54,7 +56,7 @@
   (.createMeydaAnalyzer m
                         (clj->js {"audioContext" ctx
                                   "source" audio-source
-                                  "bufferSize" 256
+                                  "bufferSize" analyzer-buffer-size
                                   "featureExtractors" ["buffer"
                                                        "rms"
                                                        "powerSpectrum"
@@ -81,14 +83,12 @@
   (js/console.log "LOADED")
   (let [buffer (.-buffer sound)
         offline-audio-context (new js/OfflineAudioContext
-                                   1
+                                   2
                                    (.-length buffer)
                                    (.-sampleRate buffer))
         buffer-source (.createBufferSource offline-audio-context)
-        _ (set! (.-buffer buffer-source) buffer)
         analyzer (offline-mayda-analyzer offline-audio-context buffer-source)]
-    ;;(.connect buffer-source analyzer)
-    ;;(.connect analyzer (.-destination offline-audio-context))
+    (set! (.-buffer buffer-source) buffer)
     (.start buffer-source 0)
     (.start analyzer)
 
@@ -99,47 +99,54 @@
                  (reset! ready? true)
                  buffer)))))
 
-
-(def target-frame-rate 60)
-(def frame (r/atom 0))
+(def volhistory (clj->js []))
 
 (defn loudness-viz
-  [sketch rms]
-  (let [width (.-width sketch)
-        height (.-height sketch)]
-    (.fill sketch 255 0 0)
-    (.circle sketch
-             (/ width 2)
-             (/ height 2)
-             (* rms width))))
+  [sketch volhistory]
+  (let [height (.-height sketch)]
+    (doto sketch
+      (.clear)
+      (.stroke 255)
+      (.noFill)
+      (.push)
+      (.beginShape))
+    (doall (map-indexed
+             (fn [i vol]
+               (let [y (.map sketch vol 0 1 (/ height 2) 0)]
+                 (.vertex sketch i, y)))
+             (js->clj volhistory)))
+    (.endShape sketch)))
 
 (defn offline-visualizer
   "Instance mode of p5: https://github.com/processing/p5.js/wiki/Global-and-instance-mode"
   [^js sketch]
-  (let [buffer-duration (atom 0)]
+  (let [start-time (atom 0)]
     (set! (.-preload sketch)
           (fn []
-            (.loadSound sketch "/example.mp3" (fn [sound]
-                                                (on-loaded sound)
-                                                (reset! buffer-duration sound.buffer.duration)))))
+            (.loadSound sketch "/affen.mp3" (fn [sound]
+                                              (.then (on-loaded sound)
+                                                     (fn []
+                                                       (reset! start-time
+                                                               (js/performance.now))))))))
     (set! (.-setup sketch)
           (fn []
             (.createCanvas sketch 400 400)))
     (set! (.-draw sketch)
           (fn []
             (when @ready?
-              ;; TODO CALCULATE RIGHT BUFFER PART
-              (let [percentage (/ @frame target-frame-rate @buffer-duration)
-                    index (int (* percentage (count @offline-analytics)))
-                    rms (get (nth @offline-analytics index)
-                             "rms")]
+              (let [local-time (- (js/performance.now)
+                                  @start-time)
+                    index (long (/ local-time 1000 (/ analyzer-buffer-size 44100)))]
 
-                (.background sketch "#ffffff")
+                (when-let [rms (get-in @offline-analytics
+                                       [index "rms"])]
+                  (.push volhistory rms)
 
-                (if (<= index (count @offline-analytics))
-                  (swap! frame inc)
-                  (reset! frame 0))
-                (loudness-viz sketch rms)))))))
+                  (loudness-viz sketch volhistory)
+
+                  (when (> (.-length volhistory)
+                           (.-width sketch))
+                    (.splice volhistory 0 1)))))))))
 
 (defn sharpness-color
   [sharpness]
@@ -299,10 +306,10 @@
   (let [model (r/atom {:sketch "v3"})]
     (r/create-class
       {:component-did-mount (fn []
-                              (let [audio-source (audio-source)]
-                                (.connect audio-source ^js audio-context.destination)
-                                (let [analyzer (mayda-analyzer audio-context audio-source)]
-                                  (.start analyzer))))
+                              #_(let [audio-source (audio-source)]
+                                  (.connect audio-source ^js audio-context.destination)
+                                  (let [analyzer (mayda-analyzer audio-context audio-source)]
+                                    (.start analyzer))))
 
        :render (fn []
                  [:div
@@ -313,7 +320,7 @@
                     :loop true
                     "crossOrigin" "anonymous"
                     :id "audio"
-                    :src "/example.mp3"}]
+                    :src "/radio-show.mp3"}]
                   [:select
                    {:onChange (fn [e]
                                 (swap! model assoc :sketch e.target.value))}
@@ -323,10 +330,18 @@
                    [:option
                     {:value "v2"}
                     "All"]]
-                  [react-p5
-                   {:sketch (get visualizers
-                                 (:sketch @model))}]
-                  [:span @frame]])})))
+                  [:div {:style {:position "relative"
+                                 :width "fit-content"
+                                 :height "fit-content"}}
+                   [:div {:style {:position "absolute"
+                                  :width "100%"
+                                  :height "100%"
+                                  :z-index -1
+                                  :background-image "url(https://images.unsplash.com/photo-1506704888326-3b8834edb40a)"
+                                  :background-size "cover"}}]
+                   [react-p5
+                    {:sketch (get visualizers
+                                  (:sketch @model))}]]])})))
 
 (defn stop []
   (js/console.log "Stopping..."))
