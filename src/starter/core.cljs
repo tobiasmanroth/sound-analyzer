@@ -2,8 +2,11 @@
   (:require [reagent.core :as r]
             ["meyda" :as m]
             ["p5" :as p5]
+            [starter.p5 :as p5-helper]
+            [starter.sketch :as p5-sketch]
             ["p5/lib/addons/p5.sound" :as p5-sound]
-            ["react-p5-wrapper" :as react-p5-wrapper]))
+            ["react-p5-wrapper" :as react-p5-wrapper]
+            [starter.sound-processing :as sound-processing]))
 
 (def react-p5
   (r/adapt-react-class react-p5-wrapper/default))
@@ -123,7 +126,7 @@
   (let [start-time (atom 0)]
     (set! (.-preload sketch)
           (fn []
-            (.loadSound sketch "/affen.mp3" (fn [sound]
+            (.loadSound sketch "/example2.mp3" (fn [sound]
                                               (.then (on-loaded sound)
                                                      (fn []
                                                        (reset! start-time
@@ -302,15 +305,37 @@
                   "v2" amplitude-over-time
                   "v3" offline-visualizer})
 
+
+
+(defn on-sound-loaded
+  "TODO"
+  [model sound]
+  (js/console.log "LOADING COMPLETE")
+  (swap! model assoc
+         :sound sound)
+  (sound-processing/analyze-sound {:sound sound
+                                   :on-analyzing (fn [progress]
+                                                   (swap! model assoc
+                                                          :analyzing-process progress))
+                                   :on-analyzed (fn [analytics-data]
+                                                  (js/console.log "ANALYZING COMPLETE")
+                                                  (swap! model assoc
+                                                         :analytics analytics-data))}))
+
+(defn on-sound-loading
+  [model process]
+  (swap! model assoc
+         :loading-process process))
+
 (defn app []
-  (let [model (r/atom {:sketch "v3"})]
+  (let [model (r/atom {:sketch "v3"
+                       :analytics nil})]
     (r/create-class
       {:component-did-mount (fn []
-                              #_(let [audio-source (audio-source)]
-                                  (.connect audio-source ^js audio-context.destination)
-                                  (let [analyzer (mayda-analyzer audio-context audio-source)]
-                                    (.start analyzer))))
-
+                              (p5-helper/load-sound
+                                {:file "/example2.mp3"
+                                 :on-loaded (partial on-sound-loaded model)
+                                 :on-loading (partial on-sound-loading model)}))
        :render (fn []
                  [:div
                   [:h1 "Audio Visualizer 0.11"]
@@ -330,6 +355,10 @@
                    [:option
                     {:value "v2"}
                     "All"]]
+                  [:div (str "Loading... " (int (* (:loading-process @model)
+                                                   100)))]
+                  [:div (str "Analyzing... " (int (* (:analyzing-process @model)
+                                                     100)))]
                   [:div {:style {:position "relative"
                                  :width "fit-content"
                                  :height "fit-content"}}
@@ -339,9 +368,14 @@
                                   :z-index -1
                                   :background-image "url(https://images.unsplash.com/photo-1506704888326-3b8834edb40a)"
                                   :background-size "cover"}}]
-                   [react-p5
-                    {:sketch (get visualizers
-                                  (:sketch @model))}]]])})))
+
+                   (when-let [analytics (:analytics @model)]
+                     [react-p5
+                      {:sketch (p5-helper/p5-sketch p5-sketch/my-sketch
+                                                    {:analyzer-buffer-size 256
+                                                     :offline-analytics analytics
+                                                     :sound (:sound @model)})}])
+                   ]])})))
 
 (defn stop []
   (js/console.log "Stopping..."))
