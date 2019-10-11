@@ -22,38 +22,46 @@
 
 (defn offline-mayda-analyzer
   "Audio feature docs: https://meyda.js.org/audio-features.html"
-  [{:keys [ctx source callback buffer-size]}]
+  [{:keys [ctx source callback buffer-size feature-extractors]}]
   (.createMeydaAnalyzer m
                         (clj->js {"audioContext" ctx
                                   "source" source
                                   "bufferSize" buffer-size
-                                  "featureExtractors" ["rms"]
+                                  "featureExtractors" feature-extractors
                                   "callback" callback})))
 
 (defn analyze-sound
-  "Prepares and starts the offline analyzing process."
+  "Prepares and starts the offline analyzing process.
+   Feature data will be written into a state atom map `analytics-data`
+   like this: {\"rms\" [0.1 0.0 1.0 ...] \"powerSpectrum\" [[1 2 3] [4 5 6] [7 8 9] ...]}"
   [{:keys [sound on-analyzed on-analyzing]}]
-  (let [analytics-data (atom [])
-        buffer-size 256
+  (let [analytics-data (atom {})
+        analyzer-buffer-size 256
+        analyzer-feature-extractors ["rms"]
         buffer (.-buffer sound)
         offline-audio-context (new js/OfflineAudioContext
                                    2
                                    (.-length buffer)
                                    (.-sampleRate buffer))
         buffer-source (.createBufferSource offline-audio-context)
+
         analyzer-callback (fn [features]
                             (let [new-analytics (js->clj features)]
-                              (swap! analytics-data
-                                     (fn [analytics]
-                                       (conj analytics new-analytics)))
+                              (doseq [[key value] new-analytics]
+                                (swap! analytics-data update key
+                                       (fn [analytics]
+                                         (conj (or analytics [])
+                                               value))))
                               (when on-analyzing
                                 (let [progress (/ (count @analytics-data)
-                                                  (/ (.-length buffer) buffer-size))]
+                                                  (/ (.-length buffer) analyzer-buffer-size))]
                                   (on-analyzing progress)))))
+
         analyzer (offline-mayda-analyzer {:ctx offline-audio-context
                                           :source buffer-source
                                           :callback analyzer-callback
-                                          :buffer-size buffer-size})]
+                                          :buffer-size analyzer-buffer-size
+                                          :feature-extractors analyzer-feature-extractors})]
     (set! (.-buffer buffer-source) buffer)
     (.start buffer-source 0)
     (.start analyzer)

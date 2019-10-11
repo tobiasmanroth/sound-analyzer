@@ -1,7 +1,4 @@
-(ns starter.sketch
-  (:require ["p5" :as p5]
-            ["p5/lib/addons/p5.sound" :as p5-sound]
-            [starter.sound-processing :as sound-processing]))
+(ns starter.sketch)
 
 (defn loudness-viz
   [sketch vol-history]
@@ -35,8 +32,9 @@
                (let [local-time (- (.millis sketch)
                                    (:start-time @state))
                      index (long (/ local-time 1000 (/ analyzer-buffer-size 44100)))]
+
                  (when-let [rms (get-in offline-analytics
-                                        [index "rms"])]
+                                        ["rms" index])]
                    (swap! state update
                           :vol-history (fn [history]
                                          (let [new-history (conj history rms)]

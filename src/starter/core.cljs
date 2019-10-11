@@ -6,6 +6,7 @@
             [starter.sketch :as p5-sketch]
             ["p5/lib/addons/p5.sound" :as p5-sound]
             ["react-p5-wrapper" :as react-p5-wrapper]
+            [clojure.string :as str]
             [starter.sound-processing :as sound-processing]))
 
 (def react-p5
@@ -37,73 +38,6 @@
                      (+ (* 0.8 item1) (* item2 0.2)))
                [a1 a2])))
 
-(def analyzer-buffer-size 256)
-
-(defn offline-mayda-analyzer
-  "Audio feature docs: https://meyda.js.org/audio-features.html"
-  [ctx audio-source]
-  (.createMeydaAnalyzer m
-                        (clj->js {"audioContext" ctx
-                                  "source" audio-source
-                                  "bufferSize" analyzer-buffer-size
-                                  "featureExtractors" ["rms"]
-                                  "callback" (fn [features]
-                                               (let [new-analytics (js->clj features)]
-                                                 (swap! offline-analytics
-                                                        (fn [analytics]
-                                                          (conj analytics new-analytics)))))})))
-
-(defn mayda-analyzer
-  "Audio feature docs: https://meyda.js.org/audio-features.html"
-  [ctx audio-source]
-  (.createMeydaAnalyzer m
-                        (clj->js {"audioContext" ctx
-                                  "source" audio-source
-                                  "bufferSize" analyzer-buffer-size
-                                  "featureExtractors" ["buffer"
-                                                       "rms"
-                                                       "powerSpectrum"
-                                                       "amplitudeSpectrum"
-                                                       "perceptualSharpness"]
-                                  "callback" (fn [features]
-                                               (let [new-analytics (-> features
-                                                                       (js->clj)
-                                                                       (update "amplitudeSpectrum"
-                                                                               (fn [spectrum]
-                                                                                 (->clj spectrum)))
-                                                                       (update "powerSpectrum"
-                                                                               (fn [spectrum]
-                                                                                 (->clj spectrum))))]
-                                                 (reset! analytics
-                                                         (merge-with
-                                                           merge-function
-                                                           @analytics
-                                                           new-analytics))))})))
-
-(def ready? (atom false))
-
-(defn on-loaded [sound]
-  (js/console.log "LOADED")
-  (let [buffer (.-buffer sound)
-        offline-audio-context (new js/OfflineAudioContext
-                                   2
-                                   (.-length buffer)
-                                   (.-sampleRate buffer))
-        buffer-source (.createBufferSource offline-audio-context)
-        analyzer (offline-mayda-analyzer offline-audio-context buffer-source)]
-    (set! (.-buffer buffer-source) buffer)
-    (.start buffer-source 0)
-    (.start analyzer)
-
-    (-> (.startRendering offline-audio-context)
-        (.then (fn [buffer]
-                 (js/console.log "Analysing complete!")
-                 (.play sound)
-                 (reset! ready? true)
-                 buffer)))))
-
-(def volhistory (clj->js []))
-
 (defn loudness-viz
   [sketch volhistory]
   (let [height (.-height sketch)]
@@ -119,37 +53,6 @@
                  (.vertex sketch i, y)))
              (js->clj volhistory)))
     (.endShape sketch)))
-
-(defn offline-visualizer
-  "Instance mode of p5: https://github.com/processing/p5.js/wiki/Global-and-instance-mode"
-  [^js sketch]
-  (let [start-time (atom 0)]
-    (set! (.-preload sketch)
-          (fn []
-            (.loadSound sketch "/example2.mp3" (fn [sound]
-                                              (.then (on-loaded sound)
-                                                     (fn []
-                                                       (reset! start-time
-                                                               (js/performance.now))))))))
-    (set! (.-setup sketch)
-          (fn []
-            (.createCanvas sketch 400 400)))
-    (set! (.-draw sketch)
-          (fn []
-            (when @ready?
-              (let [local-time (- (js/performance.now)
-                                  @start-time)
-                    index (long (/ local-time 1000 (/ analyzer-buffer-size 44100)))]
-
-                (when-let [rms (get-in @offline-analytics
-                                       [index "rms"])]
-                  (.push volhistory rms)
-
-                  (loudness-viz sketch volhistory)
-
-                  (when (> (.-length volhistory)
-                           (.-width sketch))
-                    (.splice volhistory 0 1)))))))))
 
 (defn sharpness-color
   [sharpness]
@@ -301,12 +204,6 @@
                     (.rect sketch (- width x) (/ height 2) w h roundness)))
                 @previous-rms))))))
 
-(def visualizers {"v1" audio-visualizer
-                  "v2" amplitude-over-time
-                  "v3" offline-visualizer})
-
-
-
 (defn on-sound-loaded
   "TODO"
   [model sound]
@@ -318,7 +215,6 @@
                                                    (swap! model assoc
                                                           :analyzing-process progress))
                                    :on-analyzed (fn [analytics-data]
-                                                  (js/console.log "ANALYZING COMPLETE")
                                                   (swap! model assoc
                                                          :analytics analytics-data))}))
 
@@ -333,7 +229,7 @@
     (r/create-class
       {:component-did-mount (fn []
                               (p5-helper/load-sound
-                                {:file "/example2.mp3"
+                                {:file "/radio-show.mp3"
                                  :on-loaded (partial on-sound-loaded model)
                                  :on-loading (partial on-sound-loading model)}))
        :render (fn []
