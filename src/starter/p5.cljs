@@ -21,6 +21,16 @@
       (set! (.-draw p5-sketch-object)
             draw))))
 
+(defn react-p5-sketch [{:keys [sketch width height sound offline-analytics] :as params}]
+  [react-p5
+   {:sketch (p5-sketch sketch
+                       (merge
+                         {:analyzer-buffer-size 256
+                          :width 400
+                          :height 300
+                          :offline-analytics offline-analytics}
+                         params))}])
+
 (defn load-sound
   [{:keys [file on-loaded on-error on-loading]}]
   (let [sound (new (.-SoundFile p5)

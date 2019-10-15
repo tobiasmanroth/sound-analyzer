@@ -5,12 +5,8 @@
             [starter.p5 :as p5-helper]
             [starter.sketch :as p5-sketch]
             ["p5/lib/addons/p5.sound" :as p5-sound]
-            ["react-p5-wrapper" :as react-p5-wrapper]
             [clojure.string :as str]
             [starter.sound-processing :as sound-processing]))
-
-(def react-p5
-  (r/adapt-react-class react-p5-wrapper/default))
 
 (defonce audio-context
          (new js/AudioContext))
@@ -210,13 +206,13 @@
   (js/console.log "LOADING COMPLETE")
   (swap! model assoc
          :sound sound)
-  (sound-processing/analyze-sound {:sound sound
-                                   :on-analyzing (fn [progress]
-                                                   (swap! model assoc
-                                                          :analyzing-process progress))
-                                   :on-analyzed (fn [analytics-data]
-                                                  (swap! model assoc
-                                                         :analytics analytics-data))}))
+  (sound-processing/offline-analyze-sound {:sound sound
+                                           :on-analyzing (fn [progress]
+                                                           (swap! model assoc
+                                                                  :analyzing-process progress))
+                                           :on-analyzed (fn [analytics-data]
+                                                          (swap! model assoc
+                                                                 :analytics analytics-data))}))
 
 (defn on-sound-loading
   [model process]
@@ -225,7 +221,9 @@
 
 (defn app []
   (let [model (r/atom {:sketch "v3"
-                       :analytics nil})]
+                       :analytics nil
+                       :width 200
+                       :height 200})]
     (r/create-class
       {:component-did-mount (fn []
                               (p5-helper/load-sound
@@ -255,6 +253,13 @@
                                                    100)))]
                   [:div (str "Analyzing... " (int (* (:analyzing-process @model)
                                                      100)))]
+                  [:input {:type "range"
+                           :min 100
+                           :max 500
+                           :value (:width @model)
+                           :onChange (fn [e]
+                                       (swap! model assoc
+                                              :width e.target.value))}]
                   [:div {:style {:position "relative"
                                  :width "fit-content"
                                  :height "fit-content"}}
@@ -266,12 +271,11 @@
                                   :background-size "cover"}}]
 
                    (when-let [analytics (:analytics @model)]
-                     [react-p5
-                      {:sketch (p5-helper/p5-sketch p5-sketch/my-sketch
-                                                    {:analyzer-buffer-size 256
-                                                     :offline-analytics analytics
-                                                     :sound (:sound @model)})}])
-                   ]])})))
+                     [p5-helper/react-p5-sketch {:sketch p5-sketch/my-sketch
+                                                 :width (:width @model)
+                                                 :height (:height @model)
+                                                 :sound (:sound @model)
+                                                 :offline-analytics analytics}])]])})))
 
 (defn stop []
   (js/console.log "Stopping..."))
