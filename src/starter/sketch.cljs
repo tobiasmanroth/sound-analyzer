@@ -108,7 +108,7 @@
                (let [local-time (- (.millis sketch)
                                    (:start-time @state))
                      index (long (/ local-time 1000 (/ analyzer-buffer-size 44100)))]
-                 (when-let [rms (or (get online-analytics "rms")
+                 (when-let [rms (or (get @online-analytics "rms")
                                     (get-in offline-analytics
                                             ["rms" index]))]
                    (swap! state update

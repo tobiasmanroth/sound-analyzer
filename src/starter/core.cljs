@@ -4,12 +4,6 @@
             [starter.sketch :as p5-sketch]
             [starter.sound-processing :as sound-processing]))
 
-(defonce audio-context
-         (new js/AudioContext))
-
-(defn audio-source []
-  (.createMediaElementSource audio-context (js/document.getElementById "audio")))
-
 (defn on-sound-loaded
   "TODO"
   [model sound]
@@ -22,7 +16,7 @@
                                                                   :analyzing-process progress))
                                            :on-analyzed (fn [analytics-data]
                                                           (swap! model assoc
-                                                                 :analytics analytics-data))}))
+                                                                 :offline-analytics analytics-data))}))
 
 (defn on-sound-loading
   [model process]
@@ -31,15 +25,24 @@
 
 (defn app []
   (let [model (r/atom {:sketch "v3"
-                       :analytics nil
+                       :offline-analytics []
                        :width 200
-                       :height 200})]
+                       :height 200})
+        online-analytics (atom nil)]
     (r/create-class
       {:component-did-mount (fn []
-                              (p5-helper/load-sound
-                                {:file "/radio-show.mp3"
-                                 :on-loaded (partial on-sound-loaded model)
-                                 :on-loading (partial on-sound-loading model)}))
+
+                              #_(p5-helper/load-sound
+                                  {:file "/radio-show.mp3"
+                                   :on-loaded (partial on-sound-loaded model)
+                                   :on-loading (partial on-sound-loading model)})
+
+                              (let [audio-ctx (new js/AudioContext)
+                                    audio-source (.createMediaElementSource audio-ctx (js/document.getElementById "audio"))]
+                                (sound-processing/online-analyze-sound {:audio-ctx audio-ctx
+                                                                        :audio-source audio-source
+                                                                        :analytics-data online-analytics}))
+                              )
        :render (fn []
                  [:div
                   [:h1 "Audio Visualizer 0.11"]
@@ -79,13 +82,13 @@
                                   :z-index -1
                                   :background-image "url(https://images.unsplash.com/photo-1506704888326-3b8834edb40a)"
                                   :background-size "cover"}}]
-
-                   (when-let [analytics (:analytics @model)]
-                     [p5-helper/react-p5-sketch {:sketch p5-sketch/my-sketch
-                                                 :width (:width @model)
-                                                 :height (:height @model)
-                                                 :sound (:sound @model)
-                                                 :offline-analytics analytics}])]])})))
+                   [p5-helper/react-p5-sketch {:sketch p5-sketch/my-sketch
+                                               :width (:width @model)
+                                               :height (:height @model)
+                                               :sound (:sound @model)
+                                               :online-analytics online-analytics
+                                               ;;:offline-analytics analytics
+                                               }]]])})))
 
 (defn stop []
   (js/console.log "Stopping..."))
