@@ -75,7 +75,7 @@
    Feature data will be written into a state atom map `analytics-data`
    like this: {\"rms\" [0.1 0.0 1.0 ...] \"powerSpectrum\" [[1 2 3] [4 5 6] [7 8 9] ...]}"
   [{:keys [audio-ctx audio-source analytics-data]}]
-  (let [analyzer-buffer-size 256
+  (let [analyzer-buffer-size 512
         analyzer-feature-extractors ["rms"]
         analyzer-callback (fn [features]
                             (let [new-analytics (js->clj features)]
