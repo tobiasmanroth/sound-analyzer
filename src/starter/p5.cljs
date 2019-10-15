@@ -8,6 +8,17 @@
 (def react-p5
   (r/adapt-react-class react-p5-wrapper/default))
 
+(defn logMap [val inMin inMax outMin outMax]
+  (let [o (boolean (or (= inMax 0)
+                       (= inMin 0)))
+        offset (if o 1 0)
+        inMin (if o (+ inMin offset) inMin)
+        inMax (if o (+ inMax offset) inMax)
+        a (/ (- outMin outMax) (js/Math.log10 (/ inMin inMax)))
+        b (- outMin (* a (js/Math.log10 inMin)))
+        r (+ (* a (js/Math.log10 (+ val offset))) b)]
+    r))
+
 (defn p5-sketch
   "TODO"
   [sketch params]
