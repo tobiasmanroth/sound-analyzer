@@ -24,7 +24,6 @@
       (.clear)
       (.noFill)
       (.stroke 0 0))
-
     (doall
       (map-indexed
         (fn [i volume]
@@ -70,14 +69,181 @@
               )))
         volumes))))
 
+
+(defonce state (atom {:local-time 0
+                      :offline-analytics nil
+                      :start-time 0
+                      :p5-sketch nil}))
+
 (def default-params
   {:smoothing 2
    :num-bands 5
    :spacing 1
    :width 200
-   :height 200})
+   :height 200
+   :analyzer-buffer-size 512
+   :sample-rate 44100})
 
-(def amplitude-over-time
+(defn render-frame!
+  [time dest-ctx]
+  (js/Promise. (fn [resolve reject]
+                 (swap! state assoc
+                        :local-time time
+                        :rendering true)
+                 (.redraw (:p5-sketch @state))
+                 (.drawImage dest-ctx
+                             (js/document.querySelector "#defaultCanvas0")
+                             0 0)
+                 (resolve))))
+
+(defn remove!
+  []
+  (when (:p5-sketch @state)
+    (.remove (:p5-sketch @state))))
+
+(defn analyzer-data-index
+  [local-time analyzer-buffer-size sample-rate]
+  (long (/ local-time
+           1000
+           (/ analyzer-buffer-size
+              sample-rate))))
+
+(defn my-sketch
+  "TODO"
+  [params]
+  (let [params* (merge default-params
+                       params)
+        vol-history-count (* (max (:smoothing params*) 1)
+                             (:num-bands params*))]
+    {:setup (fn [sketch]
+              (let [p5-canvas (.createCanvas sketch
+                                             (:width params*)
+                                             (:height params*))]
+                (swap! state assoc
+                       :p5-canvas (:canvas p5-canvas)
+                       :p5-sketch sketch
+                       :start-time (.millis sketch)))
+              (doto sketch
+                (.rectMode (.-CENTER sketch))
+                (.colorMode (.-HSB sketch))
+                (.noLoop)))
+     :draw (fn []
+             (let [sketch (:p5-sketch @state)]
+               (.background sketch (rand-int 255) 255 255)
+
+               #_(doseq [r (range 1000)]
+                 (.ellipse sketch
+                           (rand-int width)
+                           (rand-int height)
+                           20
+                           20))
+               (let [index (analyzer-data-index (:local-time @state)
+                                                (:analyzer-buffer-size params*)
+                                                (:sample-rate params*))
+                     offline-analytics (get-in @state
+                                               [:offline-analytics "rms"])
+                     data-points (->> offline-analytics
+                                      (take index)
+                                      (drop (- index
+                                               vol-history-count))
+                                      (reverse))]
+                 ;;(js/console.log (pr-str data-points))
+                 (loudness-viz sketch
+                               data-points
+                               params*))
+
+               (.rect sketch 0 0 100 100)
+               (.text sketch (:local-time @state) 10 25))
+
+             (comment
+               (let [sketch (:p5-sketch @state)]
+
+                 #_(case (:render-mode @state)
+                     :offline
+                     :online (do
+                               (swap! state update
+                                      :local-time (- (.millis sketch)
+                                                     (:start-time @state))
+                                      :vol-history (fn [history]
+                                                     (let [new-history (conj history rms)]
+                                                       (if (> (count new-history)
+                                                              vol-history-count)
+                                                         (drop-last new-history)
+                                                         new-history)))))
+                     ;; save volume history
+
+                     )
+
+                 #_(when-let [rms (get-in state
+                                          [:offline-analytics "rms" index])]
+
+                     )
+                 ))
+             )}))
+
+
+
+
+
+
+#_(def default-params
+  {:smoothing 2
+   :num-bands 5
+   :spacing 1
+   :width 200
+   :height 200
+   :analyzer-buffer-size 512
+   :sample-rate 44100})
+
+#_(defn amplitude-over-time [{:keys [offline-analytics local-time] :as params}]
+  (let [params* (merge default-params
+                       params)
+        vol-history-count (* (max (:smoothing params*) 1)
+                             (:num-bands params*))
+        state (atom {:vol-history (repeat vol-history-count 0)})
+        sketch (atom nil)]
+
+    {:set-time! (fn [local-time]
+                  (swap! state assoc
+                         :local-time local-time)
+                  ;;(.redraw @sketch)
+                  )
+
+     :setup (fn [sketch*]
+              (reset! sketch sketch*)
+              (swap! state assoc
+                     :start-time (.millis @sketch))
+              (doto @sketch
+                (.createCanvas (:width params*)
+                               (:height params*))
+                (.rectMode (.-CENTER @sketch))
+                (.colorMode (.-HSB @sketch))
+
+                (.noLoop)
+                ))
+     :draw (fn []
+             (let [index (long (/ (:local-time params*)
+                                  1000
+                                  (/ (:analyzer-buffer-size params*)
+                                     (:sample-rate params*))))]
+
+               (js/console.log (:local-time params*))
+
+               (when-let [rms (get-in offline-analytics
+                                      ["rms" index])]
+                 (swap! state update
+                        :vol-history (fn [history]
+                                       (let [new-history (conj history rms)]
+                                         (if (> (count new-history)
+                                                vol-history-count)
+                                           (drop-last new-history)
+                                           new-history))))
+
+                 (loudness-viz @sketch
+                               (:vol-history @state)
+                               params*))))}))
+
+#_(def amplitude-over-time
   (fn [{:keys [sketch
                online-analytics
                offline-analytics

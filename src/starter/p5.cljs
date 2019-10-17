@@ -21,40 +21,36 @@
 
 (defn p5-sketch
   "TODO"
-  [sketch params]
+  [sketch-map]
   (fn [^js p5-sketch-object]
-    (let [{:keys [preload setup draw]} (sketch (merge params
-                                                      {:sketch p5-sketch-object}))]
+    (when-let [preload-fn (:preload sketch-map)]
       (set! (.-preload p5-sketch-object)
-            preload)
-      (set! (.-setup p5-sketch-object)
-            setup)
-      (set! (.-draw p5-sketch-object)
-            draw))))
+            (partial preload-fn p5-sketch-object)))
 
-(defn react-p5-sketch [{:keys [sketch width height sound offline-analytics] :as params}]
+    (when-let [setup-fn (:setup sketch-map)]
+      (set! (.-setup p5-sketch-object)
+            (partial setup-fn p5-sketch-object)))
+
+    (when-let [draw-fn (:draw sketch-map)]
+      (set! (.-draw p5-sketch-object)
+            (partial draw-fn p5-sketch-object)))))
+
+(defn react-p5-sketch
+  [sketch-map]
   [react-p5
-   {:sketch (p5-sketch sketch
-                       (merge
-                         {:analyzer-buffer-size 256
-                          :width 400
-                          :height 300
-                          :offline-analytics offline-analytics}
-                         params))}])
+   {:sketch (p5-sketch sketch-map)}])
 
 (defn load-sound
   [{:keys [file on-loaded on-error on-loading]}]
-  (let [sound (new (.-SoundFile p5)
-                   file
-                   on-loaded
-                   on-error
-                   on-loading)]
-    {:play (fn []
-             (.play sound))
-     :stop (fn []
-             (.stop sound))
-     :pause (fn []
-              (.pause sound))}))
+  (js/Promise.
+    (fn [resolve reject]
+      (new (.-SoundFile p5)
+           file
+           (fn [sound]
+             (js/console.log "Sound loaded")
+             (resolve sound))
+           on-error
+           on-loading))))
 
 (comment
   (def sound
