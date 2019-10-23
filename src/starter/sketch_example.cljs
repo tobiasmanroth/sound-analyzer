@@ -85,16 +85,24 @@
    :sample-rate 44100})
 
 (defn render-frame!
-  [time dest-ctx]
+  [time canvas]
   (js/Promise. (fn [resolve reject]
                  (swap! state assoc
                         :local-time time
                         :rendering true)
                  (.redraw (:p5-sketch @state))
-                 (.drawImage dest-ctx
-                             (js/document.querySelector "#defaultCanvas0")
-                             0 0)
-                 (resolve))))
+                 (let [ctx (.getContext canvas "2d")
+                       canvas-width (.-width canvas)
+                       canvas-height (.-height canvas)]
+                   (.clearRect ctx 0 0
+                               canvas-width
+                               canvas-height)
+                   (.drawImage ctx
+                               (js/document.querySelector "#defaultCanvas0")
+                               0 0
+                               canvas-width
+                               canvas-height)
+                   (resolve)))))
 
 (defn remove!
   []
@@ -128,63 +136,27 @@
                 (.colorMode (.-HSB sketch))
                 (.noLoop)))
      :draw (fn []
-             (let [sketch (:p5-sketch @state)]
-               (.background sketch (rand-int 255) 255 255)
-
-               #_(doseq [r (range 1000)]
-                 (.ellipse sketch
-                           (rand-int width)
-                           (rand-int height)
-                           20
-                           20))
-               (let [index (analyzer-data-index (:local-time @state)
-                                                (:analyzer-buffer-size params*)
-                                                (:sample-rate params*))
-                     offline-analytics (get-in @state
-                                               [:offline-analytics "rms"])
-                     data-points (->> offline-analytics
-                                      (take index)
-                                      (drop (- index
-                                               vol-history-count))
-                                      (reverse))]
-                 ;;(js/console.log (pr-str data-points))
-                 (loudness-viz sketch
-                               data-points
-                               params*))
-
+             (let [sketch (:p5-sketch @state)
+                   offline-analytics (get-in @state
+                                             [:offline-analytics "rms"])
+                   index (min (analyzer-data-index (:local-time @state)
+                                                   (:analyzer-buffer-size params*)
+                                                   (:sample-rate params*))
+                              (- (count offline-analytics) 1))
+                   data-points (->> offline-analytics
+                                    (take index)
+                                    (drop (- index
+                                             vol-history-count))
+                                    (reverse))]
+               (loudness-viz sketch
+                             data-points
+                             params*)
+               (.fill sketch "white")
                (.rect sketch 0 0 100 100)
-               (.text sketch (:local-time @state) 10 25))
-
-             (comment
-               (let [sketch (:p5-sketch @state)]
-
-                 #_(case (:render-mode @state)
-                     :offline
-                     :online (do
-                               (swap! state update
-                                      :local-time (- (.millis sketch)
-                                                     (:start-time @state))
-                                      :vol-history (fn [history]
-                                                     (let [new-history (conj history rms)]
-                                                       (if (> (count new-history)
-                                                              vol-history-count)
-                                                         (drop-last new-history)
-                                                         new-history)))))
-                     ;; save volume history
-
-                     )
-
-                 #_(when-let [rms (get-in state
-                                          [:offline-analytics "rms" index])]
-
-                     )
-                 ))
-             )}))
-
-
-
-
-
+               (.fill sketch "black")
+               (.text sketch (/ (:local-time @state)
+                                1000) 10 25)
+               ))}))
 
 #_(def default-params
   {:smoothing 2

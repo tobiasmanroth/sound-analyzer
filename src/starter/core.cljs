@@ -59,13 +59,10 @@
   (js/Promise.all
     (doall
       (map
-        (fn [ctx]
+        (fn [canvas]
           (sketch-example/render-frame! time
-                                        ctx)
-          )
-        [(.getContext
-           (js/document.querySelector "#canvas")
-           "2d")]))))
+                                        canvas))
+        [(js/document.querySelector "#canvas")]))))
 
 (comment
   (def local-time
@@ -144,13 +141,13 @@
        :render (fn []
                  [:div
                   [:h1 "Audio Visualizer 0.11"]
-                  [:audio
-                   {:controls true
-                    "autoPlay" false
-                    :loop true
-                    "crossOrigin" "anonymous"
-                    :id "audio"
-                    :src "/radio-show.mp3"}]
+                  #_[:audio
+                     {:controls true
+                      "autoPlay" false
+                      :loop true
+                      "crossOrigin" "anonymous"
+                      :id "audio"
+                      :src "/radio-show.mp3"}]
 
                   [:div
                    {:style {:display "flex"}}
@@ -222,8 +219,7 @@
                                    :background-image "url(https://images.unsplash.com/photo-1506704888326-3b8834edb40a)"
                                    :background-size "cover"}}]
                     [p5-canvas model]
-                    ]]])})
-    ))
+                    ]]])})))
 
 (defonce state (atom {}))
 
