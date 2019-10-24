@@ -5,34 +5,12 @@
             [starter.sketch-example :as sketch-example ]
             [starter.sound-processing :as sound-processing]))
 
-#_(defn play-loop
-  "Starts a `js/requestAnimationFrame` loop to play a timeline. The
-   browser renders a frame approximately every 16.66 milliseconds (60
-   FPS). Adds the current `(js/performance.now)` as `:time/now` to the
-   map in the `state` Clojure atom, before it applies the function `f`
-   to the `state` value. The loop is stopped, as soon as the flag
-   `:time/stopped` is found in the state value."
-  [state f]
+(defn animation-loop
+  [render-function]
   (js/requestAnimationFrame
-    (fn raf []
-      (if (:time/stopped @state)
-        ;; provides middleware with side-effects the chance to stop
-        ;; the playback of a video for example:
-        (swap! state f)
-        (do
-          (swap! state (fn [state-value]
-                         (f (assoc state-value
-                              :time/now
-                              (js/performance.now)))))
-          (js/requestAnimationFrame raf))))))
-
-#_(play-loop local-time
-             (fn [time]
-               (sketch-example/render-frame! (:time/now time)
-                                             (.getContext
-                                               (js/document.querySelector "#canvas")
-                                               "2d"))
-               time))
+    (fn animation-loop-callback [_real-time]
+      (render-function)
+      (js/requestAnimationFrame animation-loop-callback))))
 
 (declare resolve-init-promise)
 
@@ -54,13 +32,6 @@
           (sketch-example/render-frame! time
                                         canvas))
         [(js/document.querySelector "#canvas")]))))
-
-(comment
-  (def local-time
-    (atom 0))
-  (frame-seek! (swap! local-time
-                      + 0.1))
-  )
 
 (defn cut-sound
   ""
@@ -122,21 +93,23 @@
                                 (/ 1 frame-rate)
                                 1000))))))
 
-(defn p5-canvas [model]
+(defn p5-canvas
+  [model]
   (r/create-class
     {:component-did-mount
      (fn []
-       (.then (init!)
-              (fn []
-                (resolve-init-promise)))
-       (js/console.log "CANVAS MOUNTED")
-       )
-     :component-did-update
-     (fn []
-       (js/console.log "UPDATE"))
+       ;; For offline rendering:
+       #_(.then (init!)
+                (fn []
+                  (resolve-init-promise)))
 
+       ;; For live preview:
+       (p5. (p5-helper/p5-sketch
+              (sketch-example/my-sketch {}))
+            "p5-stuff")
+       )
      :render (fn []
-               (js/console.log "RENDER")
+
                [:canvas#canvas {:width (:width @model)
                                 :height (:height @model)}])}))
 
@@ -151,22 +124,23 @@
                        :frame 0})]
     (r/create-class
       {:component-did-mount (fn []
-                              #_(let [audio-ctx (new js/AudioContext)
-                                      audio-source (.createMediaElementSource audio-ctx (js/document.getElementById "audio"))]
-                                  (sound-processing/online-analyze-sound {:audio-ctx audio-ctx
-                                                                          :audio-source audio-source
-                                                                          :analytics-data online-analytics}))
-                              )
+                              (let [audio-ctx (new js/AudioContext)
+                                    audio-source (.createMediaElementSource audio-ctx (js/document.getElementById "audio"))]
+                                (sound-processing/online-analyze-sound {:audio-ctx audio-ctx
+                                                                        :audio-source audio-source
+                                                                        :analyzer-callback sketch-example/push-live-rms-value!})
+                                (animation-loop (fn []
+                                                  (sketch-example/render-next-frame! (js/document.querySelector "#canvas"))))))
        :render (fn []
                  [:div
                   [:h1 "Audio Visualizer 0.11"]
-                  #_[:audio
-                     {:controls true
-                      "autoPlay" false
-                      :loop true
-                      "crossOrigin" "anonymous"
-                      :id "audio"
-                      :src "/radio-show.mp3"}]
+                  [:audio
+                   {:controls true
+                    "autoPlay" false
+                    :loop true
+                    "crossOrigin" "anonymous"
+                    :id "audio"
+                    :src "/radio-show.mp3"}]
 
                   [:div
                    {:style {:display "flex"}}

@@ -58,6 +58,7 @@
 
 (defonce state
          (atom {:local-time 0
+                :live-analytics nil
                 :offline-analytics nil
                 :start-time 0
                 :p5-sketch nil}))
@@ -75,8 +76,7 @@
   [time canvas]
   (js/Promise. (fn [resolve reject]
                  (swap! state assoc
-                        :local-time time
-                        :rendering true)
+                        :local-time time)
                  (.redraw (:p5-sketch @state))
                  (let [ctx (.getContext canvas "2d")
                        canvas-width (.-width canvas)
@@ -90,6 +90,23 @@
                                canvas-width
                                canvas-height)
                    (resolve)))))
+
+(defn render-next-frame!
+  "Should be called in an animation loop for live preview."
+  [canvas]
+  (when (:p5-sketch @state)
+    (.redraw (:p5-sketch @state))
+    (let [ctx (.getContext canvas "2d")
+          canvas-width (.-width canvas)
+          canvas-height (.-height canvas)]
+      (.clearRect ctx 0 0
+                  canvas-width
+                  canvas-height)
+      (.drawImage ctx
+                  (js/document.querySelector "#defaultCanvas0")
+                  0 0
+                  canvas-width
+                  canvas-height))))
 
 (defn remove!
   []
@@ -125,24 +142,47 @@
         start-index (max (- end-index
                             vol-history-count)
                          0)]
-    (pad (-> (subvec offline-analytics
-                     start-index
-                     end-index)
-             (reverse))
-         vol-history-count)))
+    (-> (subvec offline-analytics
+                start-index
+                end-index)
+        (reverse))))
+
+(defn push-live-rms-value!
+  "TODO"
+  [new-analytics]
+  (let [new-rms (get new-analytics "rms")]
+    (swap! state update-in [:live-analytics "rms"]
+           (fn [old-rms-array]
+             (let [new-rms-array (conj old-rms-array
+                                       new-rms)]
+               (if (> (count new-rms-array)
+                      (:analytics-history-size @state))
+                 (drop-last (- (count new-rms-array)
+                               (:analytics-history-size @state))
+                            new-rms-array)
+                 new-rms-array))))))
+
+(defn timestamp-viz [sketch]
+  (doto sketch
+    (.fill "white")
+    (.rect 0 0 100 100)
+    (.fill "black")
+    (.text (/ (:local-time @state)
+              1000)
+           10 25)))
 
 (defn my-sketch
   "TODO"
   [params]
   (let [params* (merge default-params
-                       params)
-        vol-history-count (* (max (:smoothing params*) 1)
-                             (:num-bands params*))]
+                       params)]
     {:setup (fn [sketch]
               (let [p5-canvas (.createCanvas sketch
                                              (:width params*)
                                              (:height params*))]
                 (swap! state assoc
+                       :analytics-history-size (* (max (:smoothing params*) 1)
+                                                  (:num-bands params*))
                        :p5-canvas (:canvas p5-canvas)
                        :p5-sketch sketch
                        :start-time (.millis sketch)))
@@ -152,14 +192,13 @@
                 (.noLoop)))
      :draw (fn []
              (let [sketch (:p5-sketch @state)
-                   data-points (get-offline-analytics-data-points params*
-                                                                  vol-history-count)]
+                   data-points (pad (or (get (:live-analytics @state)
+                                             "rms")
+                                        (get-offline-analytics-data-points params*
+                                                                           (:analytics-history-size @state)))
+                                    (:analytics-history-size @state))]
                (loudness-viz sketch
                              data-points
                              params*)
-               (.fill sketch "white")
-               (.rect sketch 0 0 100 100)
-               (.fill sketch "black")
-               (.text sketch (/ (:local-time @state)
-                                1000) 10 25)
+               ;; (timestamp-viz sketch)
                ))}))
