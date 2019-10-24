@@ -5,15 +5,6 @@
             [starter.sketch-example :as sketch-example ]
             [starter.sound-processing :as sound-processing]))
 
-(defn on-sound-loaded
-  "TODO"
-  [sound]
-  (js/Promise
-    (fn [resolve reject]
-      (sound-processing/offline-analyze-sound {:sound sound
-                                               :on-analyzed (fn [analytics-data]
-                                                              (resolve analytics-data))}))))
-
 #_(defn play-loop
   "Starts a `js/requestAnimationFrame` loop to play a timeline. The
    browser renders a frame approximately every 16.66 milliseconds (60
@@ -105,7 +96,7 @@
       (.then (fn [sound]
                (let [sound-buffer-snippet (cut-sound (.-buffer sound)
                                                      1000 2000)]
-                 (sound-processing/offline-analyze-sound {:sound-buffer sound-buffer-snippet}))))
+                 (sound-processing/offline-analyze-sound sound-buffer-snippet))))
       (.then (fn [offline-analytics]
                (swap! sketch-example/state assoc
                       :offline-analytics offline-analytics)

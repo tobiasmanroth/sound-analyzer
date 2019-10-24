@@ -3,6 +3,7 @@
             [starter.math-util :as math-util]))
 
 (defn loudness-viz
+  "The actual sound visualization"
   [sketch vol-history {:keys [num-bands spacing] :as params}]
   (let [height (.-height sketch)
         width (.-width sketch)
@@ -14,8 +15,6 @@
         gap (* w (/ spacing num-bands))
         volumes (map
                   (fn [numbers]
-                    ;;(apply max numbers)
-                    ;;(math-util/median numbers)
                     (math-util/average numbers))
                   (partition-all (int (/ (count vol-history)
                                          num-bands))
@@ -32,41 +31,28 @@
                      (* i w)
                      (/ (+ w gap) 2))
                 h (.map sketch volume
-                        0
-                        1
-                        min-height
-                        height)
+                        0 1
+                        min-height height)
                 d (max 0 (.map sketch (max (/ num-bands 2)
                                            (+ i 1))
-                               0
-                               num-bands
-                               1
-                               0.1))
+                               0 num-bands
+                               1 0.1))
                 alpha (p5-helper/logMap i
-                                        0
-                                        (- num-bands 1)
-                                        1
-                                        255)
+                                        0 (- num-bands 1)
+                                        1 255)
                 hue (.map sketch i
-                          0
-                          num-bands
-                          236
-                          100)
+                          0 num-bands
+                          236 100)
                 saturation (.map sketch i
-                                 0
-                                 num-bands
-                                 34
-                                 47)
+                                 0 num-bands
+                                 34 47)
                 brightness (.map sketch i
-                                 0
-                                 num-bands
-                                 70
-                                 97)]
+                                 0 num-bands
+                                 70 97)]
             (doto sketch
               (.fill hue saturation brightness alpha)
               (.rect x (/ height 2) w (* h d 5) roundness)
-              (.rect (- width x) (/ height 2) w (* h d 5) roundness)
-              )))
+              (.rect (- width x) (/ height 2) w (* h d 5) roundness))))
         volumes))))
 
 
@@ -128,6 +114,23 @@
       (concat data-points padding))
     data-points))
 
+(defn get-offline-analytics-data-points
+  [{:keys [analyzer-buffer-size sample-rate]} vol-history-count]
+  (let [offline-analytics (get-in @state
+                                  [:offline-analytics "rms"])
+        end-index (min (analyzer-data-index (:local-time @state)
+                                            analyzer-buffer-size
+                                            sample-rate)
+                       (- (count offline-analytics) 1))
+        start-index (max (- end-index
+                            vol-history-count)
+                         0)]
+    (pad (-> (subvec offline-analytics
+                     start-index
+                     end-index)
+             (reverse))
+         vol-history-count)))
+
 (defn my-sketch
   "TODO"
   [params]
@@ -149,20 +152,8 @@
                 (.noLoop)))
      :draw (fn []
              (let [sketch (:p5-sketch @state)
-                   offline-analytics (get-in @state
-                                             [:offline-analytics "rms"])
-                   end-index (min (analyzer-data-index (:local-time @state)
-                                                       (:analyzer-buffer-size params*)
-                                                       (:sample-rate params*))
-                                  (- (count offline-analytics) 1))
-                   start-index (max (- end-index
-                                       vol-history-count)
-                                    0)
-                   data-points (pad (-> (subvec offline-analytics
-                                                start-index
-                                                end-index)
-                                        (reverse))
-                                    vol-history-count)]
+                   data-points (get-offline-analytics-data-points params*
+                                                                  vol-history-count)]
                (loudness-viz sketch
                              data-points
                              params*)
