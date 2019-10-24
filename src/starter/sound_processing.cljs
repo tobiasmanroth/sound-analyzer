@@ -34,17 +34,16 @@
   "Prepares and starts the offline analyzing process.
    Feature data will be written into a state atom map `analytics-data`
    like this: {\"rms\" [0.1 0.0 1.0 ...] \"powerSpectrum\" [[1 2 3] [4 5 6] [7 8 9] ...]}"
-  [{:keys [sound on-analyzing]}]
+  [{:keys [sound-buffer on-analyzing]}]
   (js/Promise.
     (fn [resolve reject]
       (let [analytics-data (atom {})
             analyzer-buffer-size 256
             analyzer-feature-extractors ["rms"]
-            buffer (.-buffer sound)
             offline-audio-context (new js/OfflineAudioContext
                                        2
-                                       (.-length buffer)
-                                       (.-sampleRate buffer))
+                                       (.-length sound-buffer)
+                                       (.-sampleRate sound-buffer))
             buffer-source (.createBufferSource offline-audio-context)
 
             analyzer-callback (fn [features]
@@ -56,7 +55,7 @@
                                                    value))))
                                   (when on-analyzing
                                     (let [progress (/ (count @analytics-data)
-                                                      (/ (.-length buffer) analyzer-buffer-size))]
+                                                      (/ (.-length sound-buffer) analyzer-buffer-size))]
                                       (on-analyzing progress)))))
 
             analyzer (mayda-analyzer {:ctx offline-audio-context
@@ -64,7 +63,7 @@
                                       :callback analyzer-callback
                                       :buffer-size analyzer-buffer-size
                                       :feature-extractors analyzer-feature-extractors})]
-        (set! (.-buffer buffer-source) buffer)
+        (set! (.-buffer buffer-source) sound-buffer)
         (.start buffer-source 0)
         (.start analyzer)
 

@@ -16,3 +16,10 @@
   [numbers]
   (/ (apply + numbers)
      (count numbers)))
+
+(defn clamp
+  "Clamps `value` between minimum and maximum."
+  [value minimum maximum]
+  (min (max value
+            minimum)
+       maximum))

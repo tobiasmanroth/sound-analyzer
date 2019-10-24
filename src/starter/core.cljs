@@ -71,13 +71,41 @@
                       + 0.1))
   )
 
+(defn cut-sound
+  ""
+  [sound-buffer start-time-in-ms end-time-in-ms]
+  (let [channel-count (.-numberOfChannels sound-buffer)
+        sample-rate (.-sampleRate sound-buffer)
+        start-offset (* (/ start-time-in-ms
+                           1000) sample-rate)
+        end-sample (* (/ end-time-in-ms
+                         1000) sample-rate)
+        buffer-length (- end-sample start-offset)
+        audio-ctx (new js/AudioContext)
+        cut-buffer (.createBuffer audio-ctx
+                              channel-count
+                              buffer-length
+                              sample-rate)
+        transition-array (new js/Float32Array buffer-length)]
+
+    (doseq [channel (range channel-count)]
+      (.copyFromChannel sound-buffer transition-array
+                        channel
+                        start-offset)
+      (.copyToChannel cut-buffer transition-array
+                      channel
+                      0))
+    cut-buffer))
+
 (defn init!
   "Returns a `js/Promise` that analyzes the sound"
   []
   (-> (p5-helper/load-sound
         {:file "/radio-show.mp3"})
       (.then (fn [sound]
-               (sound-processing/offline-analyze-sound {:sound sound})))
+               (let [sound-buffer-snippet (cut-sound (.-buffer sound)
+                                                     1000 2000)]
+                 (sound-processing/offline-analyze-sound {:sound-buffer sound-buffer-snippet}))))
       (.then (fn [offline-analytics]
                (swap! sketch-example/state assoc
                       :offline-analytics offline-analytics)
@@ -157,13 +185,13 @@
                     [:span "Frame"]
                     [:input {:type "range"
                              :min 0
-                             :max 10000
+                             :max 60
                              :value (:frame @model)
                              :onChange (fn [e]
                                          (let [frame (int e.target.value)]
                                            (swap! model assoc
                                                   :frame frame)
-                                           (render-frame 30 frame)))}]
+                                           (render-frame 60 frame)))}]
                     [:span "width"]
                     [:input {:type "range"
                              :min 100
