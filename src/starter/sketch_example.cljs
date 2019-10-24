@@ -73,40 +73,42 @@
    :sample-rate 44100})
 
 (defn render-frame!
-  [time canvas]
+  [time]
   (js/Promise. (fn [resolve reject]
-                 (swap! state assoc
-                        :local-time time)
-                 (.redraw (:p5-sketch @state))
-                 (let [ctx (.getContext canvas "2d")
-                       canvas-width (.-width canvas)
-                       canvas-height (.-height canvas)]
-                   (.clearRect ctx 0 0
-                               canvas-width
-                               canvas-height)
-                   (.drawImage ctx
-                               (js/document.querySelector "#defaultCanvas0")
-                               0 0
-                               canvas-width
-                               canvas-height)
-                   (resolve)))))
+                 (when-let [editor-canvas (:editor-canvas @state)]
+                   (swap! state assoc
+                          :local-time time)
+                   (.redraw (:p5-sketch @state))
+                   (let [ctx (.getContext editor-canvas "2d")
+                         canvas-width (.-width editor-canvas)
+                         canvas-height (.-height editor-canvas)]
+                     (.clearRect ctx 0 0
+                                 canvas-width
+                                 canvas-height)
+                     (.drawImage ctx
+                                 (js/document.querySelector "#defaultCanvas0")
+                                 0 0
+                                 canvas-width
+                                 canvas-height)
+                     (resolve))))))
 
 (defn render-next-frame!
   "Should be called in an animation loop for live preview."
-  [canvas]
-  (when (:p5-sketch @state)
-    (.redraw (:p5-sketch @state))
-    (let [ctx (.getContext canvas "2d")
-          canvas-width (.-width canvas)
-          canvas-height (.-height canvas)]
-      (.clearRect ctx 0 0
-                  canvas-width
-                  canvas-height)
-      (.drawImage ctx
-                  (js/document.querySelector "#defaultCanvas0")
-                  0 0
-                  canvas-width
-                  canvas-height))))
+  []
+  (when-let [editor-canvas (:editor-canvas @state)]
+    (when (:p5-sketch @state)
+      (.redraw (:p5-sketch @state))
+      (let [ctx (.getContext editor-canvas "2d")
+            canvas-width (.-width editor-canvas)
+            canvas-height (.-height editor-canvas)]
+        (.clearRect ctx 0 0
+                    canvas-width
+                    canvas-height)
+        (.drawImage ctx
+                    (js/document.querySelector "#defaultCanvas0")
+                    0 0
+                    canvas-width
+                    canvas-height)))))
 
 (defn remove!
   []
@@ -183,6 +185,7 @@
                 (swap! state assoc
                        :analytics-history-size (* (max (:smoothing params*) 1)
                                                   (:num-bands params*))
+                       :editor-canvas (js/document.getElementById (:editor-canvas params*))
                        :p5-canvas (:canvas p5-canvas)
                        :p5-sketch sketch
                        :start-time (.millis sketch)))

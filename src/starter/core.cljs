@@ -26,12 +26,7 @@
 (defn render-time!
   [time]
   (js/Promise.all
-    (doall
-      (map
-        (fn [canvas]
-          (sketch-example/render-frame! time
-                                        canvas))
-        [(js/document.querySelector "#canvas")]))))
+    [(sketch-example/render-frame! time)]))
 
 (defn cut-sound
   ""
@@ -61,7 +56,7 @@
 
 (defn init!
   "Returns a `js/Promise` that analyzes the sound"
-  []
+  [sketch-params]
   (-> (p5-helper/load-sound
         {:file "/radio-show.mp3"})
       (.then (fn [sound]
@@ -72,7 +67,7 @@
                (swap! sketch-example/state assoc
                       :offline-analytics offline-analytics)
                (p5. (p5-helper/p5-sketch
-                      (sketch-example/my-sketch {}))
+                      (sketch-example/my-sketch sketch-params))
                     "p5-stuff")
                ))))
 
@@ -94,29 +89,30 @@
                                 1000))))))
 
 (defn p5-canvas
-  [model]
+  [{:keys [model id]}]
   (r/create-class
     {:component-did-mount
      (fn []
        ;; For offline rendering:
-       #_(.then (init!)
+       (.then (init! {:editor-canvas id})
                 (fn []
                   (resolve-init-promise)))
 
        ;; For live preview:
-       (p5. (p5-helper/p5-sketch
-              (sketch-example/my-sketch {}))
+       #_(p5. (p5-helper/p5-sketch
+              (sketch-example/my-sketch {:editor-canvas id}))
             "p5-stuff")
        )
      :render (fn []
-
-               [:canvas#canvas {:width (:width @model)
-                                :height (:height @model)}])}))
+               [:canvas
+                {:id id
+                 :width (:width @model)
+                 :height (:height @model)}])}))
 
 (defn editor-panel
   []
-  (let [model (r/atom {:offline-analytics nil
-                       :width 200
+  (let [canvas-id "p5-canvas"
+        model (r/atom {:width 200
                        :height 200
                        :num-bands 5
                        :smoothing 1
@@ -124,13 +120,15 @@
                        :frame 0})]
     (r/create-class
       {:component-did-mount (fn []
-                              (let [audio-ctx (new js/AudioContext)
-                                    audio-source (.createMediaElementSource audio-ctx (js/document.getElementById "audio"))]
-                                (sound-processing/online-analyze-sound {:audio-ctx audio-ctx
-                                                                        :audio-source audio-source
-                                                                        :analyzer-callback sketch-example/push-live-rms-value!})
-                                (animation-loop (fn []
-                                                  (sketch-example/render-next-frame! (js/document.querySelector "#canvas"))))))
+                              #_(let [audio-ctx (new js/AudioContext)
+                                      audio-source (.createMediaElementSource audio-ctx (js/document.getElementById "audio"))]
+                                  (sound-processing/online-analyze-sound {:audio-ctx audio-ctx
+                                                                          :audio-source audio-source
+                                                                          :analyzer-callback sketch-example/push-live-rms-value!})
+                                  (animation-loop (fn []
+                                                    (sketch-example/render-next-frame!)))
+                                  )
+                              )
        :render (fn []
                  [:div
                   [:h1 "Audio Visualizer 0.11"]
@@ -211,7 +209,8 @@
                                    :z-index -1
                                    :background-image "url(https://images.unsplash.com/photo-1506704888326-3b8834edb40a)"
                                    :background-size "cover"}}]
-                    [p5-canvas model]
+                    [p5-canvas {:id "p5-editor-canvas"
+                                :model model}]
                     ]]])})))
 
 (defonce state (atom {}))
@@ -241,5 +240,3 @@
 
 (defn ^:export init []
   (start))
-
-
