@@ -822,11 +822,6 @@ string_decoder@~1.1.1:
   dependencies:
     safe-buffer "~5.1.0"
 
-three@^0.108.0:
-  version "0.108.0"
-  resolved "https://registry.yarnpkg.com/three/-/three-0.108.0.tgz#53d26597c7932f214bb43f4655e566d2058143b5"
-  integrity sha512-d1ysIXwi8qTlbmMwrTxi5pYiiYIflEr0e48krP0LAY8ndS8c6fkLHn6NvRT+o76/Fs9PBLxFViuI62iGVWwwlg==
-
 through2@^2.0.1:
   version "2.0.5"
   resolved "https://registry.yarnpkg.com/through2/-/through2-2.0.5.tgz#01c1e39eb31d07cb7d03a96a70823260b23132cd"
@@ -853,8 +848,9 @@ tty-browserify@0.0.0:
   integrity sha1-oVe6QC2iTpv5V/mqadUk7tQpAaY=
 
 ua-parser-js@^0.7.9:
-  version "0.7.17"
-  resolved "https://registry.yarnpkg.com/ua-parser-js/-/ua-parser-js-0.7.17.tgz#e9ec5f9498b9ec910e7ae3ac626a805c4d09ecac"
+  version "0.7.28"
+  resolved "https://registry.yarnpkg.com/ua-parser-js/-/ua-parser-js-0.7.28.tgz#8ba04e653f35ce210239c64661685bf9121dec31"
+  integrity sha512-6Gurc1n//gjp9eQNXjD9O3M/sMwVtN5S8Lv9bvOYBfKfDNiIIhqiyi01vMBO45u4zkDE420w/e0se7Vs+sIg+g==
 
 ultron@~1.1.0:
   version "1.1.1"
